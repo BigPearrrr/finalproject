@@ -1,6 +1,2 @@
 ﻿  main.cpp
-C:\Users\BigPear\source\repos\AIDraughts\AIDraughts\main.cpp(365,11): warning C4244: “return”: 从“float”转换到“int”，可能丢失数据
-C:\Users\BigPear\source\repos\AIDraughts\AIDraughts\main.cpp(367,12): warning C4244: “return”: 从“float”转换到“int”，可能丢失数据
-C:\Users\BigPear\source\repos\AIDraughts\AIDraughts\main.cpp(478,87): warning C4244: “参数”: 从“float”转换到“int”，可能丢失数据
-C:\Users\BigPear\source\repos\AIDraughts\AIDraughts\main.cpp(478,77): warning C4244: “参数”: 从“float”转换到“int”，可能丢失数据
   AIDraughts.vcxproj -> C:\Users\BigPear\source\repos\AIDraughts\Debug\AIDraughts.exe
