@@ -32,7 +32,7 @@ typedef int BOOL;
 #define KINGSCORE 20//若它是王，则一定是普兵 普兵+1 所以共+3
 #define POWNSCORE 10
 #define INF 999999
-#define DEPTH 11
+#define DEPTH 13
 
 #define ATTACKWEIGHT 3
 #define DEFENDWEIGHT 9
@@ -56,7 +56,7 @@ typedef int BOOL;
 #define DANGERREMAIN5 2
 #define DANGERTURN 60
 #define CEILINGPOINT 3
-#define SAFESCORE 2
+#define SAFESCORE 3
 //11.18 开始项目，添加一些基本的注释
 
 
@@ -152,6 +152,13 @@ int absCal(int x)
 {
 	return x > 0 ? x : -x;
 }
+void swap(int* a, int* b)
+{
+	int temp;
+	temp = *a;
+	*a = *b;
+	*b = temp;
+}
 char curBoard1[BOARD_SIZE][BOARD_SIZE] = { 0 };//用来操作的临时棋盘
 //char kingBoard[BOARD_SIZE][BOARD_SIZE] = { 0 };//记录王的位置
 int curTurn;//记录现在的回合数
@@ -169,6 +176,7 @@ int virtualNumRemaining[5] = { 24,12,12,0,0 };
 struct Command validEat[MAX_TURN][MAX_STEP];
 int possibility;
 int previousSafeDistrict[6][2] = { {1,0},{3,0},{5,0},{2,7},{4,7},{6,7} };
+int mediumSafeDistrict[14][2] = { {1,0},{3,0},{5,0},{7,0},{7,2},{7,4},{7,6},{6,7},{4,7},{2,7},{0,7},{0,5},{0,3} };
 void initAllStructArray()//用于初始化几个结构体数组
 {
 	//memset(bestMove, 0, sizeof(bestMove));
@@ -551,7 +559,7 @@ int evaluate(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int curFlag, int turn
 
 		}
 	}*/
-	if (turn <= 20)
+	if (turn <= 105)
 	{
 		for (int i = 0; i < 6; i++)
 		{
@@ -565,6 +573,20 @@ int evaluate(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int curFlag, int turn
 			}
 		}
 	}
+	/*else if (turn <= 80)
+	{
+		for (int i = 0; i < 14; i++)
+		{
+			if (is_mine((const char(*)[BOARD_SIZE])curBoard1, mediumSafeDistrict[i][0], previousSafeDistrict[i][1], me_flag))
+			{
+				totalScore += SAFESCORE;
+			}
+			if (is_others((const char(*)[BOARD_SIZE])curBoard1, mediumSafeDistrict[i][0], previousSafeDistrict[i][1], other_flag))
+			{
+				totalScore -= SAFESCORE;
+			}
+		}
+	}*/
 	int differnum = blackScore - whiteScore;
 	totalScore += me_flag == BLACK ? differnum : -differnum;
 	return totalScore;
@@ -590,6 +612,19 @@ void giveNumRemaining(int originArray[3], int targetArray[3], int length)
 	}
 }
 int flag_hold;
+void createRandomArray(int* array, int length)//生成一个随机数组
+{
+	srand((unsigned)time(NULL));
+	for (int i = 0; i < length; i++)
+	{
+		array[i] = i;//生成一个自然数列
+	}
+	for (int i = 0; i < length; i++)
+	{
+		int temp = rand() % (length - i) + i;
+		swap(&array[temp], &array[i]);
+	}
+}
 int alphaBeta(char curBoard1[BOARD_SIZE][BOARD_SIZE], int turn, int depth, int flag, int alpha, int beta)//alphabeta剪枝
 {
 	int myScore = evaluate((const char(*)[BOARD_SIZE])curBoard1, flag, turn);
@@ -608,22 +643,10 @@ int alphaBeta(char curBoard1[BOARD_SIZE][BOARD_SIZE], int turn, int depth, int f
 		return myScore;
 	}
 	validEatStep[turn] = scanAllvalidMove((char(*)[BOARD_SIZE])curBoard1, flag, turn);
-	//if (validMove[curTurn][0].allPossibility > 0 && validMove[curTurn][0].allPossibility <= 5)
-	//{
-	//	printf("DEBUG 深度由%d加为%d\n", depth, depth + 2);
-	//	fflush(stdout);
-	//	depth += 2;
-	//	
-	//}
-	//else if (validMove[curTurn][0].allPossibility >= 8)
-	//{
-	//	printf("DEBUG 深度由%d减为%d\n", depth, depth - 2);
-	//	fflush(stdout);
-	//	depth -= 2;
-	//}//试试看
 	int curValidEatStep = validEatStep[turn];
+	//进入ab剪枝
 	if (flag == me_flag)
-	{//进入ab剪枝
+	{
 		if (validEatStep[turn])//有吃必吃
 		{
 			giveNumberMaxStep(turn);
@@ -646,23 +669,22 @@ int alphaBeta(char curBoard1[BOARD_SIZE][BOARD_SIZE], int turn, int depth, int f
 						bestMove[turn] = validEat[turn][i];
 					}
 					if (alpha >= beta)
-					{
-						//printf("alpha>=beta,NOW CUT THE BRANCH.");
 						break;
-					}
 				}
 			}
 			return alpha;
 		}
 		else
 		{
+			int randomArray[MAX_STEP];
+			createRandomArray(randomArray, validMove[turn][0].allPossibility);
 			for (int i = 0; i <= validMove[turn][0].allPossibility; i++)
 			{
 				int tempNumRemaining[5] = { 0 };
 				giveNumRemaining(virtualNumRemaining, tempNumRemaining, VIRTUALARRAYLENGTH);
 				char tmpBoard[8][8] = { 0 };
 				giveBoard((char(*)[BOARD_SIZE])curBoard1, (char(*)[BOARD_SIZE])tmpBoard);
-				placeCurBoard((char(*)[BOARD_SIZE])curBoard1, validMove[turn][i], flag);
+				placeCurBoard((char(*)[BOARD_SIZE])curBoard1, validMove[turn][randomArray[i]], flag);
 				int value = alphaBeta((char(*)[BOARD_SIZE])curBoard1, turn + 1, depth - 1, other_flag, alpha, beta);
 				giveBoard((char(*)[BOARD_SIZE])tmpBoard, (char(*)[BOARD_SIZE])curBoard1);
 				giveNumRemaining(tempNumRemaining, virtualNumRemaining, VIRTUALARRAYLENGTH);
@@ -718,13 +740,15 @@ int alphaBeta(char curBoard1[BOARD_SIZE][BOARD_SIZE], int turn, int depth, int f
 		}
 		else
 		{
+			int randomArray[MAX_STEP];
+			createRandomArray(randomArray, validMove[turn][0].allPossibility);
 			for (int i = 0; i <= validMove[turn][0].allPossibility; i++)
 			{
 				int tempNumRemaining[5] = { 0 };
 				giveNumRemaining(virtualNumRemaining, tempNumRemaining, VIRTUALARRAYLENGTH);
 				char tmpBoard[8][8] = { 0 };
 				giveBoard((char(*)[BOARD_SIZE])curBoard1, (char(*)[BOARD_SIZE])tmpBoard);
-				placeCurBoard((char(*)[BOARD_SIZE])curBoard1, validMove[turn][i], flag);
+				placeCurBoard((char(*)[BOARD_SIZE])curBoard1, validMove[turn][randomArray[i]], flag);
 				int value = alphaBeta((char(*)[BOARD_SIZE])curBoard1, turn + 1, depth - 1, me_flag, alpha, beta);
 				giveBoard((char(*)[BOARD_SIZE])tmpBoard, (char(*)[BOARD_SIZE])curBoard1);
 				giveNumRemaining(tempNumRemaining, virtualNumRemaining, VIRTUALARRAYLENGTH);
@@ -752,7 +776,7 @@ int miniMax(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int depth)//极大极小值
 	flag_hold = 0;
 	int x = alphaBeta((char(*)[BOARD_SIZE])curBoard1, curTurn, depth, me_flag, -INF, INF);
 	int curEvaluation = evaluate((char(*)[BOARD_SIZE])curBoard1, me_flag, curTurn);
-	printf("DEBUG Current node result is %d\n", x);
+	printf("DEBUG Current node result is %d\n", curEvaluation);
 	fflush(stdout);
 	return x;
 }
@@ -782,7 +806,7 @@ struct Command aiTurn(const char board[BOARD_SIZE][BOARD_SIZE], int me)
 		}
 		else if (numRemaining[me_flag] <= DANGERREMAIN5)
 		{
-			depth = (MAX_TURN - curTurn)/2+1;
+			depth = (MAX_TURN - curTurn) / 2 + 1;
 		}
 	thisNodeValue = miniMax((const char(*)[BOARD_SIZE])curBoard1, depth);
 	if (bestMove[curTurn].numStep < 2)
@@ -883,7 +907,7 @@ void loop()
 }
 
 int main(int argc, char* argv[])
-{ 
+{
 	loop();
 	return 0;
 }
