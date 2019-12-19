@@ -29,17 +29,34 @@ typedef int BOOL;
 #define WITHDRAWME "WITHDRAWME"
 #define WITHDRAWOTHER "WITHDRAWOTHER"
 
-#define KINGSCORE 50
-#define POWNSCORE 20
-#define INF 99999
-#define DEPTH 13
+#define KINGSCORE 20//若它是王，则一定是普兵 普兵+1 所以共+3
+#define POWNSCORE 10
+#define INF 999999
+#define DEPTH 11
 
 #define ATTACKWEIGHT 3
-#define DEFENDWEIGHT 15
-#define EATWEIGHT 2
-#define DIFFERWEIGHT 3
+#define DEFENDWEIGHT 9
+#define EATWEIGHT 1
+#define DIFFERWEIGHT 5
+#define REPEATWEIGHT 10
+#define TIMELIMIT 1.85
 
+#define DANGERREMAIN1 10
+#define DANGERDEPTH1 13
 
+#define DANGERREMAIN2 8
+#define DANGERDEPTH2 15
+
+#define DANGERREMAIN3 6
+#define DANGERDEPTH3 19
+
+#define DANGERREMAIN4 4
+#define DANGERDEPTH4 23
+
+#define DANGERREMAIN5 2
+#define DANGERTURN 60
+#define CEILINGPOINT 3
+#define SAFESCORE 2
 //11.18 开始项目，添加一些基本的注释
 
 
@@ -95,6 +112,28 @@ typedef int BOOL;
 //		目前9层效果最好，不明为什么
 //		对于可吃的子力也需要深搜！
 //		用足够高的defendweight战平了sober
+//		需要改进估值函数了，子力前后和左右的进攻极不平衡
+
+//12.11	多次调参后发现9层仍是最好效果。
+//		经常送子给对面吃。
+//		有时不知走边路进攻底线而会在0,1 1,0处徘徊
+//		程序已经基本没有bug了
+//		目前最好效果：#define ATTACKWEIGHT 3
+//					 #define DEFENDWEIGHT 9
+// 					 #define EATWEIGHT 3
+//					 #define DIFFERWEIGHT 5
+
+//12.12	开始着手解决1,0 0,1徘徊的问题
+//		需要加入随机数 随机剪枝
+//		对于危险棋子优先剪枝。
+
+//12.17	还是要用最简单的估值，别的估值效果并不好
+//		需要对棋局最后几步加大估值的权重
+//		从一开始就应该使用裸估，而不要考虑EATWEIGHT之类的奇技淫巧
+//		还是11层效果最最好！！！！！！！
+//		要用allPossibility来控制搜索层数
+//		终局判断不够完善
+int depth = DEPTH;
 int randomint(int left, int right)
 {
 	int random = rand();
@@ -129,7 +168,7 @@ int numRemaining[5] = { 24,12,12 ,0,0 };
 int virtualNumRemaining[5] = { 24,12,12,0,0 };
 struct Command validEat[MAX_TURN][MAX_STEP];
 int possibility;
-
+int previousSafeDistrict[6][2] = { {1,0},{3,0},{5,0},{2,7},{4,7},{6,7} };
 void initAllStructArray()//用于初始化几个结构体数组
 {
 	//memset(bestMove, 0, sizeof(bestMove));
@@ -211,31 +250,6 @@ void printCurBoard(const char curBoard1[BOARD_SIZE][BOARD_SIZE])//输出curBoard1
 	printf("↓Next Possibility↓\n");
 }
 
-void withdrawOperation(char curBoard[BOARD_SIZE][BOARD_SIZE],int cur_flag,struct Command cmd)
-{
-	int x_mid, y_mid;
-	for (int i = 0; i < BOARD_SIZE; i++)
-	{
-		if (curBoard[0][i] == B_KING)
-			curBoard[0][i] = BLACK;
-		if (curBoard[BOARD_SIZE - 1][i] == W_KING)
-			curBoard[BOARD_SIZE - 1][i] = WHITE;
-	}
-	for (int i=cmd.numStep-1;i>=1; i--)
-	{
-		curBoard[cmd.x[i]][cmd.y[i]] = EMPTY;
-		curBoard[cmd.x[i - 1]][cmd.y[i - 1]] = cur_flag;
-		if (abs(cmd.x[i] - cmd.x[i - 1]) == 2)
-		{
-			//printBoard();
-			x_mid = (cmd.x[i] + cmd.x[i - 1]) / 2;
-			y_mid = (cmd.y[i] + cmd.y[i - 1]) / 2;
-			curBoard[x_mid][y_mid] = 3-cur_flag;
-		}
-	}
-	//printCurBoard((char(*)[BOARD_SIZE])curBoard1);
-}
-
 BOOL isInBound(int x, int y)
 {
 	return x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE;
@@ -277,7 +291,7 @@ void place(struct Command cmd, int cur_flag)
 	curTurn++;
 }
 
-void placeCurBoard(char curBoard1[BOARD_SIZE][BOARD_SIZE],struct Command cmd, int cur_flag)//在curBoard1上走子
+void placeCurBoard(char curBoard1[BOARD_SIZE][BOARD_SIZE], struct Command cmd, int cur_flag)//在curBoard1上走子
 {
 	int x_mid, y_mid;
 	for (int i = 0; i < cmd.numStep - 1; i++)
@@ -289,13 +303,13 @@ void placeCurBoard(char curBoard1[BOARD_SIZE][BOARD_SIZE],struct Command cmd, in
 			x_mid = (cmd.x[i] + cmd.x[i + 1]) / 2;
 			y_mid = (cmd.y[i] + cmd.y[i + 1]) / 2;
 			if (board[x_mid][y_mid] > 2)
-				virtualNumRemaining[board[x_mid][y_mid]]--;
+				virtualNumRemaining[curBoard1[x_mid][y_mid]]--;
 			virtualNumRemaining[3 - cur_flag]--;
 			virtualNumRemaining[0]--;
 			curBoard1[x_mid][y_mid] = EMPTY;
 		}
 	}
-	for (int i = 1; i < BOARD_SIZE; i++)
+	for (int i = 0; i < BOARD_SIZE; i++)
 	{
 		if (curBoard1[0][i] == BLACK)
 		{
@@ -311,7 +325,7 @@ void placeCurBoard(char curBoard1[BOARD_SIZE][BOARD_SIZE],struct Command cmd, in
 	//printCurBoard((char(*)[BOARD_SIZE])curBoard1);
 }
 
-BOOL is_empty(const char curBoard1[BOARD_SIZE][BOARD_SIZE],int x, int y)//判断是否为空
+BOOL is_empty(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int x, int y)//判断是否为空
 {
 	if (!(x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE))
 		return TRUE;
@@ -320,14 +334,14 @@ BOOL is_empty(const char curBoard1[BOARD_SIZE][BOARD_SIZE],int x, int y)//判断是
 	return TRUE;
 }
 
-BOOL is_mine(const char curBoard1[BOARD_SIZE][BOARD_SIZE],int x, int y, int me)//判断该空是否是我的棋
+BOOL is_mine(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int x, int y, int me)//判断该空是否是我的棋
 {
-	if (curBoard1[x][y] == me||curBoard1[x][y]==me+2)
+	if (curBoard1[x][y] == me || curBoard1[x][y] == me + 2)
 		return TRUE;
 	return FALSE;
 }
 
-BOOL is_others(const char curBoard1[BOARD_SIZE][BOARD_SIZE],int x, int y, int others)//判断该空是否是别人的棋
+BOOL is_others(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int x, int y, int others)//判断该空是否是别人的棋
 {
 	//int others_king = others + 2;
 	if (curBoard1[x][y] == others || curBoard1[x][y] == others + 2)
@@ -337,20 +351,18 @@ BOOL is_others(const char curBoard1[BOARD_SIZE][BOARD_SIZE],int x, int y, int ot
 
 void initAI(int me)
 {
-
+	printf("DEBUG My AI is %d,\n", me);
+	fflush(stdout);
 }
 
 //-------------------------------------------------------------
 //  DFS_validEat:查找吃子&多重吃子的可能性
 //	scanValidEat:通过初始化查找多重吃子
 //  scanValidMove:查找普通位移的可能性
-//	scanAllValidMove:将上面两个函数封装,若返回值为1则说明可以吃子。
-//					-否则从诸多possibility中选择一个作为aiTurn。
+//	scanAllValidMove:将上面两个函数封装,返回值为可吃子的数量,若无则返回0			
 //-------------------------------------------------------------
 
-
-
-void DFS_validEat(char curBoard1[BOARD_SIZE][BOARD_SIZE],int x, int y, int flag, int step, int turn)//用深搜查找可吃的子
+void DFS_validEat(char curBoard1[BOARD_SIZE][BOARD_SIZE], int x, int y, int flag, int step, int turn)//用深搜查找可吃的子
 {
 	int otherFlag = 3 - flag;
 	validEat[turn][possibility].x[step - 1] = x;
@@ -360,14 +372,14 @@ void DFS_validEat(char curBoard1[BOARD_SIZE][BOARD_SIZE],int x, int y, int flag,
 	{
 		int nextX = x + normalMoveDirection[k][0];
 		int nextY = y + normalMoveDirection[k][1];
-		if (is_others((const char(*)[BOARD_SIZE])curBoard1,nextX, nextY, otherFlag) &&
-			is_empty((const char(*)[BOARD_SIZE])curBoard1,nextX + normalMoveDirection[k][0], nextY + normalMoveDirection[k][1]) &&
+		if (is_others((const char(*)[BOARD_SIZE])curBoard1, nextX, nextY, otherFlag) &&
+			is_empty((const char(*)[BOARD_SIZE])curBoard1, nextX + normalMoveDirection[k][0], nextY + normalMoveDirection[k][1]) &&
 			isInBound(nextX + normalMoveDirection[k][0], nextY + normalMoveDirection[k][1]))
-		{//判断三个条件:此方向有子否?空否?界内否?
+		{//判断三个条件:此方向有子否?下一个空否?界内否?
 			int temp = 0;
 			temp = curBoard1[nextX][nextY];
 			curBoard1[nextX][nextY] = 0;
-			DFS_validEat(( char(*)[BOARD_SIZE])curBoard1,nextX + normalMoveDirection[k][0], nextY + normalMoveDirection[k][1], flag, step + 1, turn);
+			DFS_validEat((char(*)[BOARD_SIZE])curBoard1, nextX + normalMoveDirection[k][0], nextY + normalMoveDirection[k][1], flag, step + 1, turn);
 			int stepHere = step;
 			possibility++;
 			for (int i = 0; i < stepHere; i++)
@@ -405,15 +417,15 @@ void scanValidEat(int flag, int turn)
 	{
 		for (int j = 0; j < BOARD_SIZE; j++)
 		{
-			if (curBoard1[i][j] == flag|| curBoard1[i][j] == flag+2)
+			if (curBoard1[i][j] == flag || curBoard1[i][j] == flag + 2)
 			{
-				DFS_validEat((char(*)[BOARD_SIZE])curBoard1,i, j, flag, 1, turn);
+				DFS_validEat((char(*)[BOARD_SIZE])curBoard1, i, j, flag, 1, turn);
 			}
 		}
 	}
 }
 
-void scanValidMove(const char curBoard1[BOARD_SIZE][BOARD_SIZE],int curFlag, int turn)
+void scanValidMove(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int curFlag, int turn)
 {
 	int possibility = 0;
 	for (int x = 0; x < BOARD_SIZE; x++)
@@ -426,7 +438,7 @@ void scanValidMove(const char curBoard1[BOARD_SIZE][BOARD_SIZE],int curFlag, int
 				{
 					int nextX = x + normalMoveDirection[i][0];
 					int nextY = y + normalMoveDirection[i][1];
-					if (is_empty((const char(*)[BOARD_SIZE])curBoard1,nextX, nextY) && isInBound(nextX, nextY))
+					if (is_empty((const char(*)[BOARD_SIZE])curBoard1, nextX, nextY) && isInBound(nextX, nextY))
 					{
 						validMove[turn][possibility].x[0] = x;
 						validMove[turn][possibility].x[1] = nextX;
@@ -442,7 +454,7 @@ void scanValidMove(const char curBoard1[BOARD_SIZE][BOARD_SIZE],int curFlag, int
 				{
 					int nextX = x + normalMoveDirection[i][0];
 					int nextY = y + normalMoveDirection[i][1];
-					if (is_empty((const char(*)[BOARD_SIZE])curBoard1,nextX, nextY) && isInBound(nextX, nextY))
+					if (is_empty((const char(*)[BOARD_SIZE])curBoard1, nextX, nextY) && isInBound(nextX, nextY))
 					{
 						validMove[turn][possibility].x[0] = x;
 						validMove[turn][possibility].x[1] = nextX;
@@ -461,7 +473,7 @@ void scanValidMove(const char curBoard1[BOARD_SIZE][BOARD_SIZE],int curFlag, int
 	}
 }
 
-int scanAllvalidMove(char curBoard1[BOARD_SIZE][BOARD_SIZE],int flag, int curTurn)
+int scanAllvalidMove(char curBoard1[BOARD_SIZE][BOARD_SIZE], int flag, int curTurn)
 {
 	//
 	scanValidEat(flag, curTurn);
@@ -479,7 +491,7 @@ int scanAllvalidMove(char curBoard1[BOARD_SIZE][BOARD_SIZE],int flag, int curTur
 	{
 		return maxStep;
 	}
-	scanValidMove((const char(*)[BOARD_SIZE])curBoard1,flag, curTurn);
+	scanValidMove((const char(*)[BOARD_SIZE])curBoard1, flag, curTurn);
 	return 0;
 }
 
@@ -492,7 +504,7 @@ int scanAllvalidMove(char curBoard1[BOARD_SIZE][BOARD_SIZE],int flag, int curTur
 
 int blackScore = 0, whiteScore = 0;
 
-int gameOver(const char curBoard1[BOARD_SIZE][BOARD_SIZE],int curTurn)
+int gameOver(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int curTurn)
 //判断游戏是否结束，若结束则直接输出获胜的那方，未结束则输出0.
 {
 	if (virtualNumRemaining[WHITE] == 0)
@@ -501,49 +513,63 @@ int gameOver(const char curBoard1[BOARD_SIZE][BOARD_SIZE],int curTurn)
 		return WHITE;
 	blackScore = 0;
 	whiteScore = 0;
-	blackScore += virtualNumRemaining[BLACK] + 3 * virtualNumRemaining[B_KING];
-	whiteScore += virtualNumRemaining[WHITE] + 3 * virtualNumRemaining[W_KING];
-	if (curTurn>=120)
+	blackScore += POWNSCORE * virtualNumRemaining[BLACK] + KINGSCORE * virtualNumRemaining[B_KING];
+	whiteScore += POWNSCORE * virtualNumRemaining[WHITE] + KINGSCORE * virtualNumRemaining[W_KING];
+	if (curTurn >= 120)
 		return blackScore > whiteScore ? BLACK : WHITE;
 	return 0;
 }
 
 int validEatStep[MAX_TURN];
 
-int evaluate(const char curBoard1[BOARD_SIZE][BOARD_SIZE],int curFlag,int turn)//估值函数，给curBoard1打分
-{//此估值函数只估值黑子。
-	//printCurBoard((char(*)[BOARD_SIZE])curBoard1);
-	int winFlag = gameOver((const char(*)[BOARD_SIZE])curBoard1, turn);//判断棋局终止与否
-	int attackScore = 0;
-	int defendScore = 0;
-	int totalScore = 0;
-	int differNum = blackScore - whiteScore;
-	if (me_flag == WHITE)
-		differNum *= -1;
-	
-	validEatStep[turn] = scanAllvalidMove((char(*)[BOARD_SIZE])curBoard1, curFlag, turn);
-	if (winFlag)
-	{
+int evaluate(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int curFlag, int turn)//估值函数，给curBoard1打分
+{
+	int winFlag = gameOver((char(*)[BOARD_SIZE])curBoard1, turn);
+	if (winFlag) {
 		if (winFlag == me_flag)
 			return INF;
-		if (winFlag == other_flag)
+		else
 			return -INF;
 	}
-	int eatScore = EATWEIGHT * validEatStep[turn];//如果是我的子力能吃，则给我的进攻分加分;如果对手的子力能吃，则给我的进攻分减分。
-	if (curFlag == me_flag)
-		attackScore += eatScore;
-	else
+	int totalScore = 0;
+	/*if (turn<=DANGERTURN1)
 	{
-		defendScore -= eatScore;
+		for (int i = 0; i < BOARD_SIZE; i++)
+		{
+			if (is_mine((const char(*)[BOARD_SIZE])curBoard1, 0, i, me_flag))
+				myScore+
+		}
+	}*/
+	/*if (turn >= DANGERTURN)
+	{
+		int k;
+		k = me_flag == BLACK ? 0 : 7;
+		for (int i = 0; i < BOARD_SIZE; i++)
+		{
+			if (is_mine((const char(*)[BOARD_SIZE])curBoard1,k,i,me_flag))
+				totalScore+=CEILINGPOINT;
+
+		}
+	}*/
+	if (turn <= 20)
+	{
+		for (int i = 0; i < 6; i++)
+		{
+			if (is_mine((const char(*)[BOARD_SIZE])curBoard1, previousSafeDistrict[i][0], previousSafeDistrict[i][1], me_flag))
+			{
+				totalScore += SAFESCORE;
+			}
+			if (is_others((const char(*)[BOARD_SIZE])curBoard1, previousSafeDistrict[i][0], previousSafeDistrict[i][1], other_flag))
+			{
+				totalScore -= SAFESCORE;
+			}
+		}
 	}
-	attackScore += DIFFERWEIGHT * differNum;
-	defendScore += DIFFERWEIGHT * differNum;
-	totalScore = ATTACKWEIGHT * attackScore + DEFENDWEIGHT * defendScore;
-	//printf("The current number is %d\n", totalScore);
+	int differnum = blackScore - whiteScore;
+	totalScore += me_flag == BLACK ? differnum : -differnum;
 	return totalScore;
 }
-
-int nodes;
+//int nodes;
 
 void giveBoard(char originBoard[BOARD_SIZE][BOARD_SIZE], char targetBoard[BOARD_SIZE][BOARD_SIZE])
 {
@@ -563,19 +589,38 @@ void giveNumRemaining(int originArray[3], int targetArray[3], int length)
 		targetArray[i] = originArray[i];
 	}
 }
-
+int flag_hold;
 int alphaBeta(char curBoard1[BOARD_SIZE][BOARD_SIZE], int turn, int depth, int flag, int alpha, int beta)//alphabeta剪枝
 {
-	int myScore = evaluate((const char(*)[BOARD_SIZE])curBoard1,flag, turn);
+	int myScore = evaluate((const char(*)[BOARD_SIZE])curBoard1, flag, turn);
 	/*printCurBoard((char(*)[BOARD_SIZE])curBoard1);*/
 	endTime = clock();
 	double runTime = (double)(endTime - startTime) / CLOCKS_PER_SEC;
-	if ((runTime) > 1.8)
+	if ((runTime) > TIMELIMIT) {
+		if (!flag_hold) {
+			printf("DEBUG Time out ,cut!!numremaining%d depth%d\n", virtualNumRemaining[me_flag], depth);
+			flag_hold = 1;
+		}
 		return myScore;
-	if (depth == 0 || abs(myScore) > 90000)
+	}
+	if (depth <= 0 || abs(myScore) > 90000)
 	{
 		return myScore;
 	}
+	validEatStep[turn] = scanAllvalidMove((char(*)[BOARD_SIZE])curBoard1, flag, turn);
+	//if (validMove[curTurn][0].allPossibility > 0 && validMove[curTurn][0].allPossibility <= 5)
+	//{
+	//	printf("DEBUG 深度由%d加为%d\n", depth, depth + 2);
+	//	fflush(stdout);
+	//	depth += 2;
+	//	
+	//}
+	//else if (validMove[curTurn][0].allPossibility >= 8)
+	//{
+	//	printf("DEBUG 深度由%d减为%d\n", depth, depth - 2);
+	//	fflush(stdout);
+	//	depth -= 2;
+	//}//试试看
 	int curValidEatStep = validEatStep[turn];
 	if (flag == me_flag)
 	{//进入ab剪枝
@@ -704,21 +749,46 @@ int nodesMax;
 
 int miniMax(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int depth)//极大极小值搜索
 {
-	int x = alphaBeta(( char(*)[BOARD_SIZE])curBoard1, curTurn,depth, me_flag, -INF, INF);
+	flag_hold = 0;
+	int x = alphaBeta((char(*)[BOARD_SIZE])curBoard1, curTurn, depth, me_flag, -INF, INF);
+	int curEvaluation = evaluate((char(*)[BOARD_SIZE])curBoard1, me_flag, curTurn);
+	printf("DEBUG Current node result is %d\n", x);
+	fflush(stdout);
 	return x;
 }
 
-
+int thisNodeValue = 0;
 
 struct Command aiTurn(const char board[BOARD_SIZE][BOARD_SIZE], int me)
 {
 	initAllStructArray();
 	memset(bestMove, 0, sizeof(bestMove));
-	int thisNodeValue=miniMax((const char(*)[BOARD_SIZE])curBoard1, DEPTH);
-	if (bestMove[curTurn].numStep<2)
+	if (thisNodeValue < 0)//根据当前子力多少来决定搜索深度
+		if (numRemaining[me_flag] <= DANGERREMAIN1)
+		{
+			depth = DANGERDEPTH1;
+		}
+		else if (numRemaining[me_flag] <= DANGERREMAIN2)
+		{
+			depth = DANGERDEPTH2;
+		}
+		else if (numRemaining[me_flag] <= DANGERREMAIN3)
+		{
+			depth = DANGERDEPTH3;
+		}
+		else if (numRemaining[me_flag] <= DANGERREMAIN4)
+		{
+			depth = DANGERDEPTH4;
+		}
+		else if (numRemaining[me_flag] <= DANGERREMAIN5)
+		{
+			depth = (MAX_TURN - curTurn)/2+1;
+		}
+	thisNodeValue = miniMax((const char(*)[BOARD_SIZE])curBoard1, depth);
+	if (bestMove[curTurn].numStep < 2)
 	{
 		scanAllvalidMove((char(*)[BOARD_SIZE])curBoard1, me, curTurn);
-		int randMove = randomint(0, validMove[curTurn][0].allPossibility-1);
+		int randMove = randomint(0, validMove[curTurn][0].allPossibility);//
 		bestMove[curTurn] = validMove[curTurn][randMove];
 	}
 	return bestMove[curTurn];
@@ -757,7 +827,7 @@ void turn()
 	}
 	printf("\n");
 	endTime = clock();
-	double runTime =(double) (endTime - startTime)/CLOCKS_PER_SEC;
+	double runTime = (double)(endTime - startTime) / CLOCKS_PER_SEC;
 	printf("DEBUG %f\n", runTime);
 	fflush(stdout);
 }
@@ -769,7 +839,6 @@ void end(int x)
 
 void loop()
 {
-	//freopen("../input", "r", stdin);
 	char tag[10] = { 0 };
 	char buffer[MAX_BYTE + 1] = { 0 };
 	struct Command command = {
@@ -809,21 +878,12 @@ void loop()
 			scanf("%d", &status);
 			end(status);
 		}
-		else if (strcmp(tag, WITHDRAWME) == 0)
-		{
-			withdrawOperation((char(*)[BOARD_SIZE])board, me_flag, bestMove[--curTurn]);
-			
-		}
-		else if (strcmp(tag, WITHDRAWOTHER) == 0)
-		{
-			withdrawOperation((char(*)[BOARD_SIZE])board, other_flag, bestMove[--curTurn]);
-		}
 		//printBoard();
 	}
 }
 
 int main(int argc, char* argv[])
-{
+{ 
 	loop();
 	return 0;
 }
