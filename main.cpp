@@ -91,7 +91,6 @@ typedef int BOOL;
 //		修改了估值函数
 //		第一层估值函数就不用搜索了
 //		开局第二步会送子给对手bug
-//		被助教怒斥了。
 //		更新了numRemaining中记载王棋的数量
 //		今日困惑:如何生成足够随机的数？
 //		亟待采用随机方法搜索
@@ -133,6 +132,12 @@ typedef int BOOL;
 //		还是11层效果最最好！！！！！！！
 //		要用allPossibility来控制搜索层数
 //		终局判断不够完善
+
+//12.18	差不多该交最终版本了，增添了SAFESCORE
+//		可能还是有bug 但是不太想找了。
+//		13层效果比11层好一些
+
+//12.19	加入了随机数列优化搜索
 int depth = DEPTH;
 int randomint(int left, int right)
 {
@@ -676,7 +681,7 @@ int alphaBeta(char curBoard1[BOARD_SIZE][BOARD_SIZE], int turn, int depth, int f
 		}
 		else
 		{
-			int randomArray[MAX_STEP];
+			int randomArray[MAX_STEP] = { 0 };
 			createRandomArray(randomArray, validMove[turn][0].allPossibility);
 			for (int i = 0; i <= validMove[turn][0].allPossibility; i++)
 			{
@@ -740,7 +745,7 @@ int alphaBeta(char curBoard1[BOARD_SIZE][BOARD_SIZE], int turn, int depth, int f
 		}
 		else
 		{
-			int randomArray[MAX_STEP];
+			int randomArray[MAX_STEP] = { 0 };
 			createRandomArray(randomArray, validMove[turn][0].allPossibility);
 			for (int i = 0; i <= validMove[turn][0].allPossibility; i++)
 			{
