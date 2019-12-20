@@ -4,6 +4,8 @@
 #include <time.h>
 #include <math.h>
 
+//---------------------------宏定义区------------------------------
+
 #define BOARD_SIZE 8
 #define VIRTUALARRAYLENGTH 5
 #define EMPTY 0
@@ -42,10 +44,10 @@ typedef int BOOL;
 #define TIMELIMIT 1.85
 
 #define DANGERREMAIN1 10
-#define DANGERDEPTH1 13
+#define DANGERDEPTH1 14
 
 #define DANGERREMAIN2 8
-#define DANGERDEPTH2 15
+#define DANGERDEPTH2 16
 
 #define DANGERREMAIN3 6
 #define DANGERDEPTH3 19
@@ -57,6 +59,10 @@ typedef int BOOL;
 #define DANGERTURN 60
 #define CEILINGPOINT 3
 #define SAFESCORE 3
+#define PREVIOUSTURN 80
+
+//---------------------------------------------------------
+
 //11.18 开始项目，添加一些基本的注释
 
 
@@ -91,6 +97,7 @@ typedef int BOOL;
 //		修改了估值函数
 //		第一层估值函数就不用搜索了
 //		开局第二步会送子给对手bug
+//		被助教怒斥了。
 //		更新了numRemaining中记载王棋的数量
 //		今日困惑:如何生成足够随机的数？
 //		亟待采用随机方法搜索
@@ -133,18 +140,18 @@ typedef int BOOL;
 //		要用allPossibility来控制搜索层数
 //		终局判断不够完善
 
+
 //12.18	差不多该交最终版本了，增添了SAFESCORE
 //		可能还是有bug 但是不太想找了。
 //		13层效果比11层好一些
 
 //12.19	加入了随机数列优化搜索
-int depth = DEPTH;
-int randomint(int left, int right)
-{
-	int random = rand();
-	int distance = right - left;
-	return left + random % (right - left);
-}
+
+int randomint(int left, int right);//生成随机整数
+
+
+
+//---------------------------全局变量区------------------------------
 struct Command
 {
 	int x[MAX_STEP];
@@ -153,27 +160,15 @@ struct Command
 	int allPossibility;//用来记录一个turn所有的可能走子的
 	int maxStep;//用来记录可吃子的最大步数
 };
-int absCal(int x)
-{
-	return x > 0 ? x : -x;
-}
-void swap(int* a, int* b)
-{
-	int temp;
-	temp = *a;
-	*a = *b;
-	*b = temp;
-}
 char curBoard1[BOARD_SIZE][BOARD_SIZE] = { 0 };//用来操作的临时棋盘
-//char kingBoard[BOARD_SIZE][BOARD_SIZE] = { 0 };//记录王的位置
 int curTurn;//记录现在的回合数
 char board[BOARD_SIZE][BOARD_SIZE] = { 0 };//真实对局board
 struct Command bestMove[MAX_TURN];//记录每手的输出
 struct Command validMove[MAX_TURN][MAX_STEP];//记录每手可能的走子
 int me_flag;
 int other_flag;
-int normalMoveDirection[4][2] = { {-1,-1},{-1,1},{1,-1},{1,1} };
-int eatDirection[4][2] = { {-2,-2},{-2,2},{2,-2},{2,2} };
+int normalMoveDirection[8][2] = { {-1,-1},{-1,1},{1,1},{1,-1},{-1,-1},{-1,1},{1,1},{1,-1} };
+int eatDirection[8][2] = { {-2,-2},{-2,2},{2,2},{2,-2},{-2,-2},{-2,2},{2,2},{2,-2} };
 clock_t startTime;
 clock_t endTime;
 int numRemaining[5] = { 24,12,12 ,0,0 };
@@ -181,192 +176,36 @@ int virtualNumRemaining[5] = { 24,12,12,0,0 };
 struct Command validEat[MAX_TURN][MAX_STEP];
 int possibility;
 int previousSafeDistrict[6][2] = { {1,0},{3,0},{5,0},{2,7},{4,7},{6,7} };
-int mediumSafeDistrict[14][2] = { {1,0},{3,0},{5,0},{7,0},{7,2},{7,4},{7,6},{6,7},{4,7},{2,7},{0,7},{0,5},{0,3} };
-void initAllStructArray()//用于初始化几个结构体数组
-{
-	//memset(bestMove, 0, sizeof(bestMove));
-	memset(validMove, 0, sizeof(validMove));
-	memset(validEat, 0, sizeof(validEat));
-}
+int flag_hold;
+int depth = DEPTH;
 
-void debug(const char* str)//在任何时候输出debug信息
-{
-	printf("DEBUG %s\n", str);
-	fflush(stdout);
-}
+//------------------------------------------------------------------
 
-void printBoard()//输出棋盘
-{
-	char visual_board[BOARD_SIZE][BOARD_SIZE + 1] = { 0 };
-	for (int i = 0; i < BOARD_SIZE; i++)
-	{
-		for (int j = 0; j < BOARD_SIZE; j++)
-		{
-			if (board[i][j] == EMPTY)
-			{
-				visual_board[i][j] = '.';
-			}
-			else if (board[i][j] == BLACK)
-			{
-				visual_board[i][j] = 'O';
-			}
-			else if (board[i][j] == WHITE)
-			{
-				visual_board[i][j] = 'X';
-			}
-			else if (board[i][j] == B_KING)
-			{
-				visual_board[i][j] = 'B';
-			}
-			else if (board[i][j] == W_KING)
-			{
-				visual_board[i][j] = 'W';
-			}
-		}
-		printf("%s\n", visual_board[i]);
-	}
-}
+//-------------------------基本函数----------------------------------
+void initAllStructArray();//用于初始化几个结构体数组
 
-void printCurBoard(const char curBoard1[BOARD_SIZE][BOARD_SIZE])//输出curBoard1
-{
-	char visual_board[BOARD_SIZE][BOARD_SIZE + 1] = { 0 };
-	for (int i = 0; i < BOARD_SIZE; i++)
-		printf("-");
-	printf("\n");
-	for (int i = 0; i < BOARD_SIZE; i++)
-	{
-		for (int j = 0; j < BOARD_SIZE; j++)
-		{
-			if (curBoard1[i][j] == EMPTY)
-			{
-				visual_board[i][j] = '.';
-			}
-			else if (curBoard1[i][j] == BLACK)
-			{
-				visual_board[i][j] = 'O';
-			}
-			else if (curBoard1[i][j] == WHITE)
-			{
-				visual_board[i][j] = 'X';
-			}
-			else if (curBoard1[i][j] == B_KING)
-			{
-				visual_board[i][j] = 'B';
-			}
-			else if (curBoard1[i][j] == W_KING)
-			{
-				visual_board[i][j] = 'W';
-			}
-		}
-		printf("%s\n", visual_board[i]);
-	}
-	printf("↓Next Possibility↓\n");
-}
+void swap(struct Command* a, struct Command* b);//交换两个command结构体
 
-BOOL isInBound(int x, int y)
-{
-	return x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE;
-}
+int absCal(int x);//计算绝对值
 
-void place(struct Command cmd, int cur_flag)
-{
-	int x_mid, y_mid;
-	for (int i = 0; i < cmd.numStep - 1; i++)
-	{
-		board[cmd.x[i]][cmd.y[i]] = EMPTY;
-		board[cmd.x[i + 1]][cmd.y[i + 1]] = cur_flag;
-		if (abs(cmd.x[i] - cmd.x[i + 1]) == 2)
-		{
-			x_mid = (cmd.x[i] + cmd.x[i + 1]) / 2;
-			y_mid = (cmd.y[i] + cmd.y[i + 1]) / 2;
-			if (board[x_mid][y_mid] > 2)
-				numRemaining[board[x_mid][y_mid]]--;
-			numRemaining[3 - cur_flag]--;
-			numRemaining[0]--;
-			board[x_mid][y_mid] = EMPTY;
-		}
-	}
+void printBoard();
 
-	for (int i = 0; i < BOARD_SIZE; i++)
-	{
-		if (board[0][i] == BLACK)
-		{
-			board[0][i] = B_KING;
-			numRemaining[B_KING]++;
-		}
+void printCurBoard(const char curBoard1[BOARD_SIZE][BOARD_SIZE]);//输出curBoard1
 
-		if (board[BOARD_SIZE - 1][i] == WHITE)
-		{
-			board[BOARD_SIZE - 1][i] = W_KING;
-			numRemaining[W_KING]++;
-		}
-	}
-	curTurn++;
-}
+BOOL isInBound(int x, int y);
 
-void placeCurBoard(char curBoard1[BOARD_SIZE][BOARD_SIZE], struct Command cmd, int cur_flag)//在curBoard1上走子
-{
-	int x_mid, y_mid;
-	for (int i = 0; i < cmd.numStep - 1; i++)
-	{
-		curBoard1[cmd.x[i]][cmd.y[i]] = EMPTY;
-		curBoard1[cmd.x[i + 1]][cmd.y[i + 1]] = cur_flag;
-		if (abs(cmd.x[i] - cmd.x[i + 1]) == 2)
-		{
-			x_mid = (cmd.x[i] + cmd.x[i + 1]) / 2;
-			y_mid = (cmd.y[i] + cmd.y[i + 1]) / 2;
-			if (board[x_mid][y_mid] > 2)
-				virtualNumRemaining[curBoard1[x_mid][y_mid]]--;
-			virtualNumRemaining[3 - cur_flag]--;
-			virtualNumRemaining[0]--;
-			curBoard1[x_mid][y_mid] = EMPTY;
-		}
-	}
-	for (int i = 0; i < BOARD_SIZE; i++)
-	{
-		if (curBoard1[0][i] == BLACK)
-		{
-			curBoard1[0][i] = B_KING;
-			virtualNumRemaining[B_KING]++;
-		}
-		if (board[BOARD_SIZE - 1][i] == WHITE)
-		{
-			curBoard1[BOARD_SIZE - 1][i] = W_KING;
-			virtualNumRemaining[W_KING]++;
-		}
-	}
-	//printCurBoard((char(*)[BOARD_SIZE])curBoard1);
-}
+void place(struct Command cmd, int cur_flag);
 
-BOOL is_empty(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int x, int y)//判断是否为空
-{
-	if (!(x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE))
-		return TRUE;
-	if (curBoard1[x][y])
-		return FALSE;
-	return TRUE;
-}
+void placeCurBoard(char curBoard1[BOARD_SIZE][BOARD_SIZE], struct Command cmd, int cur_flag);//在curBoard1上走子
 
-BOOL is_mine(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int x, int y, int me)//判断该空是否是我的棋
-{
-	if (curBoard1[x][y] == me || curBoard1[x][y] == me + 2)
-		return TRUE;
-	return FALSE;
-}
+BOOL is_empty(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int x, int y);//判断是否为空
 
-BOOL is_others(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int x, int y, int others)//判断该空是否是别人的棋
-{
-	//int others_king = others + 2;
-	if (curBoard1[x][y] == others || curBoard1[x][y] == others + 2)
-		return TRUE;
-	return FALSE;
-}
+BOOL is_mine(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int x, int y, int me);//判断该空是否是我的棋
 
-void initAI(int me)
-{
-	printf("DEBUG My AI is %d,\n", me);
-	fflush(stdout);
-}
+BOOL is_others(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int x, int y, int others);//判断该空是否是别人的棋
+
+void initAI(int me);//初始化我的AI
+
 
 //-------------------------------------------------------------
 //  DFS_validEat:查找吃子&多重吃子的可能性
@@ -487,8 +326,8 @@ void scanValidMove(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int curFlag, in
 }
 
 int scanAllvalidMove(char curBoard1[BOARD_SIZE][BOARD_SIZE], int flag, int curTurn)
+//先搜吃子，有则返回具体可吃的数量；再搜普通位移
 {
-	//
 	scanValidEat(flag, curTurn);
 	int maxStep = 0;
 	int maxIndex = 0;
@@ -534,69 +373,46 @@ int gameOver(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int curTurn)
 }
 
 int validEatStep[MAX_TURN];
+int getDangerIndex(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int x, int y)
+{
+	int nextX, nextY;
+	int dangerIndex;
+	for (int i = 0; i < 4; i++)
+	{
+		nextX = x + normalMoveDirection[i][0];
+		nextY = x + normalMoveDirection[i][1];
+		if (!isInBound(nextX, nextY))
+			return 0;
+		if (is_empty((char(*)[BOARD_SIZE])curBoard1,nextX, nextY));
 
+	}
+	return 0;
+}
 int evaluate(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int curFlag, int turn)//估值函数，给curBoard1打分
 {
 	int winFlag = gameOver((char(*)[BOARD_SIZE])curBoard1, turn);
-	if (winFlag) {
+	if (winFlag) 
+	{
 		if (winFlag == me_flag)
 			return INF;
 		else
 			return -INF;
 	}
 	int totalScore = 0;
-	/*if (turn<=DANGERTURN1)
-	{
-		for (int i = 0; i < BOARD_SIZE; i++)
-		{
-			if (is_mine((const char(*)[BOARD_SIZE])curBoard1, 0, i, me_flag))
-				myScore+
-		}
-	}*/
-	/*if (turn >= DANGERTURN)
-	{
-		int k;
-		k = me_flag == BLACK ? 0 : 7;
-		for (int i = 0; i < BOARD_SIZE; i++)
-		{
-			if (is_mine((const char(*)[BOARD_SIZE])curBoard1,k,i,me_flag))
-				totalScore+=CEILINGPOINT;
-
-		}
-	}*/
-	if (turn <= 105)
+	if (turn <= PREVIOUSTURN)
 	{
 		for (int i = 0; i < 6; i++)
 		{
-			if (is_mine((const char(*)[BOARD_SIZE])curBoard1, previousSafeDistrict[i][0], previousSafeDistrict[i][1], me_flag))
+			if (is_mine((const char(*)[BOARD_SIZE])curBoard1, previousSafeDistrict[i][0],previousSafeDistrict[i][1], me_flag))
 			{
 				totalScore += SAFESCORE;
-			}
-			if (is_others((const char(*)[BOARD_SIZE])curBoard1, previousSafeDistrict[i][0], previousSafeDistrict[i][1], other_flag))
-			{
-				totalScore -= SAFESCORE;
 			}
 		}
 	}
-	/*else if (turn <= 80)
-	{
-		for (int i = 0; i < 14; i++)
-		{
-			if (is_mine((const char(*)[BOARD_SIZE])curBoard1, mediumSafeDistrict[i][0], previousSafeDistrict[i][1], me_flag))
-			{
-				totalScore += SAFESCORE;
-			}
-			if (is_others((const char(*)[BOARD_SIZE])curBoard1, mediumSafeDistrict[i][0], previousSafeDistrict[i][1], other_flag))
-			{
-				totalScore -= SAFESCORE;
-			}
-		}
-	}*/
 	int differnum = blackScore - whiteScore;
 	totalScore += me_flag == BLACK ? differnum : -differnum;
 	return totalScore;
 }
-//int nodes;
 
 void giveBoard(char originBoard[BOARD_SIZE][BOARD_SIZE], char targetBoard[BOARD_SIZE][BOARD_SIZE])
 {
@@ -616,20 +432,16 @@ void giveNumRemaining(int originArray[3], int targetArray[3], int length)
 		targetArray[i] = originArray[i];
 	}
 }
-int flag_hold;
-void createRandomArray(int* array, int length)//生成一个随机数组
+void randomizeArray(struct Command *array, int allPossibility)//生成一个随机数组
 {
 	srand((unsigned)time(NULL));
-	for (int i = 0; i < length; i++)
+	for (int i = 0; i <allPossibility; i++)
 	{
-		array[i] = i;//生成一个自然数列
-	}
-	for (int i = 0; i < length; i++)
-	{
-		int temp = rand() % (length - i) + i;
+		int temp = rand() % (allPossibility - i) + i;
 		swap(&array[temp], &array[i]);
 	}
 }
+
 int alphaBeta(char curBoard1[BOARD_SIZE][BOARD_SIZE], int turn, int depth, int flag, int alpha, int beta)//alphabeta剪枝
 {
 	int myScore = evaluate((const char(*)[BOARD_SIZE])curBoard1, flag, turn);
@@ -649,9 +461,9 @@ int alphaBeta(char curBoard1[BOARD_SIZE][BOARD_SIZE], int turn, int depth, int f
 	}
 	validEatStep[turn] = scanAllvalidMove((char(*)[BOARD_SIZE])curBoard1, flag, turn);
 	int curValidEatStep = validEatStep[turn];
-	//进入ab剪枝
+	//randomizeArray(validMove[turn], validMove[turn][0].allPossibility);
 	if (flag == me_flag)
-	{
+	{//进入ab剪枝
 		if (validEatStep[turn])//有吃必吃
 		{
 			giveNumberMaxStep(turn);
@@ -674,34 +486,33 @@ int alphaBeta(char curBoard1[BOARD_SIZE][BOARD_SIZE], int turn, int depth, int f
 						bestMove[turn] = validEat[turn][i];
 					}
 					if (alpha >= beta)
+					{
+						//printf("alpha>=beta,NOW CUT THE BRANCH.");
 						break;
+					}
 				}
 			}
 			return alpha;
 		}
 		else
 		{
-			int randomArray[MAX_STEP] = { 0 };
-			createRandomArray(randomArray, validMove[turn][0].allPossibility);
 			for (int i = 0; i <= validMove[turn][0].allPossibility; i++)
 			{
 				int tempNumRemaining[5] = { 0 };
 				giveNumRemaining(virtualNumRemaining, tempNumRemaining, VIRTUALARRAYLENGTH);
 				char tmpBoard[8][8] = { 0 };
 				giveBoard((char(*)[BOARD_SIZE])curBoard1, (char(*)[BOARD_SIZE])tmpBoard);
-				placeCurBoard((char(*)[BOARD_SIZE])curBoard1, validMove[turn][randomArray[i]], flag);
+				placeCurBoard((char(*)[BOARD_SIZE])curBoard1, validMove[turn][i], flag);
 				int value = alphaBeta((char(*)[BOARD_SIZE])curBoard1, turn + 1, depth - 1, other_flag, alpha, beta);
 				giveBoard((char(*)[BOARD_SIZE])tmpBoard, (char(*)[BOARD_SIZE])curBoard1);
 				giveNumRemaining(tempNumRemaining, virtualNumRemaining, VIRTUALARRAYLENGTH);
 				if (value > alpha)
 				{
 					alpha = value;
-					//printf("current alpha=%d\n", alpha);
 					bestMove[turn] = validMove[turn][i];
 				}
 				if (alpha >= beta)
 				{
-					//printf("alpha>=beta,NOW CUT THE BRANCH.");
 					break;
 				}
 			}
@@ -745,15 +556,13 @@ int alphaBeta(char curBoard1[BOARD_SIZE][BOARD_SIZE], int turn, int depth, int f
 		}
 		else
 		{
-			int randomArray[MAX_STEP] = { 0 };
-			createRandomArray(randomArray, validMove[turn][0].allPossibility);
 			for (int i = 0; i <= validMove[turn][0].allPossibility; i++)
 			{
 				int tempNumRemaining[5] = { 0 };
 				giveNumRemaining(virtualNumRemaining, tempNumRemaining, VIRTUALARRAYLENGTH);
 				char tmpBoard[8][8] = { 0 };
 				giveBoard((char(*)[BOARD_SIZE])curBoard1, (char(*)[BOARD_SIZE])tmpBoard);
-				placeCurBoard((char(*)[BOARD_SIZE])curBoard1, validMove[turn][randomArray[i]], flag);
+				placeCurBoard((char(*)[BOARD_SIZE])curBoard1, validMove[turn][i], flag);
 				int value = alphaBeta((char(*)[BOARD_SIZE])curBoard1, turn + 1, depth - 1, me_flag, alpha, beta);
 				giveBoard((char(*)[BOARD_SIZE])tmpBoard, (char(*)[BOARD_SIZE])curBoard1);
 				giveNumRemaining(tempNumRemaining, virtualNumRemaining, VIRTUALARRAYLENGTH);
@@ -773,8 +582,6 @@ int alphaBeta(char curBoard1[BOARD_SIZE][BOARD_SIZE], int turn, int depth, int f
 		}
 	}
 }
-
-int nodesMax;
 
 int miniMax(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int depth)//极大极小值搜索
 {
@@ -817,7 +624,7 @@ struct Command aiTurn(const char board[BOARD_SIZE][BOARD_SIZE], int me)
 	if (bestMove[curTurn].numStep < 2)
 	{
 		scanAllvalidMove((char(*)[BOARD_SIZE])curBoard1, me, curTurn);
-		int randMove = randomint(0, validMove[curTurn][0].allPossibility);//
+		int randMove = randomint(0, validMove[curTurn][0].allPossibility);//防止自动投降（PLACE 0）
 		bestMove[curTurn] = validMove[curTurn][randMove];
 	}
 	return bestMove[curTurn];
@@ -863,7 +670,7 @@ void turn()
 
 void end(int x)
 {
-
+	printf("DEBUG GG!!\n");
 }
 
 void loop()
@@ -915,4 +722,223 @@ int main(int argc, char* argv[])
 {
 	loop();
 	return 0;
+}
+//不出大问题下面这坨就不改了
+
+
+
+/* _____                     _      ______                          
+/  ___|                   | |     |  _  \                         
+\ `--.  ___  __ _ _ __ ___| |__   | | | |___  ___ _ __   ___ _ __ 
+ `--. \/ _ \/ _` | '__/ __| '_ \  | | | / _ \/ _ \ '_ \ / _ \ '__|
+/\__/ /  __/ (_| | | | (__| | | | | |/ /  __/  __/ |_) |  __/ |   
+\____/ \___|\__,_|_|  \___|_| |_| |___/ \___|\___| .__/ \___|_|   
+                                                 | |              
+                                                 |_|             
+												 
+
+
+
+
+
+
+
+
+
+ _____      _     _   _ _       _                 _____                    
+|  __ \    | |   | | | (_)     | |               /  ___|                   
+| |  \/ ___| |_  | |_| |_  __ _| |__   ___ _ __  \ `--.  ___ ___  _ __ ___ 
+| | __ / _ \ __| |  _  | |/ _` | '_ \ / _ \ '__|  `--. \/ __/ _ \| '__/ _ \
+| |_\ \  __/ |_  | | | | | (_| | | | |  __/ |    /\__/ / (_| (_) | | |  __/
+ \____/\___|\__| \_| |_/_|\__, |_| |_|\___|_|    \____/ \___\___/|_|  \___|
+                           __/ |                                           
+                          |___/                */
+
+
+void printBoard()//输出棋盘
+{
+	char visual_board[BOARD_SIZE][BOARD_SIZE + 1] = { 0 };
+	for (int i = 0; i < BOARD_SIZE; i++)
+	{
+		for (int j = 0; j < BOARD_SIZE; j++)
+		{
+			if (board[i][j] == EMPTY)
+			{
+				visual_board[i][j] = '.';
+			}
+			else if (board[i][j] == BLACK)
+			{
+				visual_board[i][j] = 'O';
+			}
+			else if (board[i][j] == WHITE)
+			{
+				visual_board[i][j] = 'X';
+			}
+			else if (board[i][j] == B_KING)
+			{
+				visual_board[i][j] = 'B';
+			}
+			else if (board[i][j] == W_KING)
+			{
+				visual_board[i][j] = 'W';
+			}
+		}
+		printf("%s\n", visual_board[i]);
+	}
+}
+void printCurBoard(const char curBoard1[BOARD_SIZE][BOARD_SIZE])//输出curBoard1
+{
+	char visual_board[BOARD_SIZE][BOARD_SIZE + 1] = { 0 };
+	for (int i = 0; i < BOARD_SIZE; i++)
+		printf("-");
+	printf("\n");
+	for (int i = 0; i < BOARD_SIZE; i++)
+	{
+		for (int j = 0; j < BOARD_SIZE; j++)
+		{
+			if (curBoard1[i][j] == EMPTY)
+			{
+				visual_board[i][j] = '.';
+			}
+			else if (curBoard1[i][j] == BLACK)
+			{
+				visual_board[i][j] = 'O';
+			}
+			else if (curBoard1[i][j] == WHITE)
+			{
+				visual_board[i][j] = 'X';
+			}
+			else if (curBoard1[i][j] == B_KING)
+			{
+				visual_board[i][j] = 'B';
+			}
+			else if (curBoard1[i][j] == W_KING)
+			{
+				visual_board[i][j] = 'W';
+			}
+		}
+		printf("%s\n", visual_board[i]);
+	}
+	printf("↓Next Possibility↓\n");
+}
+void place(struct Command cmd, int cur_flag)
+{
+	int x_mid, y_mid;
+	for (int i = 0; i < cmd.numStep - 1; i++)
+	{
+		board[cmd.x[i]][cmd.y[i]] = EMPTY;
+		board[cmd.x[i + 1]][cmd.y[i + 1]] = cur_flag;
+		if (abs(cmd.x[i] - cmd.x[i + 1]) == 2)
+		{
+			x_mid = (cmd.x[i] + cmd.x[i + 1]) / 2;
+			y_mid = (cmd.y[i] + cmd.y[i + 1]) / 2;
+			if (board[x_mid][y_mid] > 2)
+			{
+				numRemaining[board[x_mid][y_mid]]--;
+			}
+			numRemaining[3 - cur_flag]--;
+			numRemaining[0]--;
+			board[x_mid][y_mid] = EMPTY;
+		}
+	}
+	for (int i = 0; i < BOARD_SIZE; i++)
+	{
+		if (board[0][i] == BLACK)
+		{
+			board[0][i] = B_KING;
+			numRemaining[B_KING]++;
+		}
+
+		if (board[BOARD_SIZE - 1][i] == WHITE)
+		{
+			board[BOARD_SIZE - 1][i] = W_KING;
+			numRemaining[W_KING]++;
+		}
+	}
+	curTurn++;
+}
+BOOL isInBound(int x, int y)
+{
+	return x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE;
+}
+void placeCurBoard(char curBoard1[BOARD_SIZE][BOARD_SIZE], struct Command cmd, int cur_flag)//在curBoard1上走子
+{
+	int x_mid, y_mid;
+	for (int i = 0; i < cmd.numStep - 1; i++)
+	{
+		curBoard1[cmd.x[i]][cmd.y[i]] = EMPTY;
+		curBoard1[cmd.x[i + 1]][cmd.y[i + 1]] = cur_flag;
+		if (abs(cmd.x[i] - cmd.x[i + 1]) == 2)
+		{
+			x_mid = (cmd.x[i] + cmd.x[i + 1]) / 2;
+			y_mid = (cmd.y[i] + cmd.y[i + 1]) / 2;
+			if (board[x_mid][y_mid] > 2)
+				virtualNumRemaining[curBoard1[x_mid][y_mid]]--;
+			virtualNumRemaining[3 - cur_flag]--;
+			virtualNumRemaining[0]--;
+			curBoard1[x_mid][y_mid] = EMPTY;
+		}
+	}
+	for (int i = 0; i < BOARD_SIZE; i++)
+	{
+		if (curBoard1[0][i] == BLACK)
+		{
+			curBoard1[0][i] = B_KING;
+			virtualNumRemaining[B_KING]++;
+		}
+		if (board[BOARD_SIZE - 1][i] == WHITE)
+		{
+			curBoard1[BOARD_SIZE - 1][i] = W_KING;
+			virtualNumRemaining[W_KING]++;
+		}
+	}
+}
+BOOL is_empty(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int x, int y)//判断是否为空
+{
+	if (!(x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE))
+		return TRUE;
+	if (curBoard1[x][y])
+		return FALSE;
+	return TRUE;
+}
+BOOL is_mine(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int x, int y, int me)//判断该空是否是我的棋
+{
+	if (curBoard1[x][y] == me || curBoard1[x][y] == me + 2)
+		return TRUE;
+	return FALSE;
+}
+BOOL is_others(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int x, int y, int others)//判断该空是否是别人的棋
+{
+	if (curBoard1[x][y] == others || curBoard1[x][y] == others + 2)
+		return TRUE;
+	return FALSE;
+}
+void initAllStructArray()//用于初始化几个结构体数组
+{
+	//memset(bestMove, 0, sizeof(bestMove));
+	memset(validMove, 0, sizeof(validMove));
+	memset(validEat, 0, sizeof(validEat));
+}
+int randomint(int left, int right)
+{
+	srand((unsigned)time(NULL));
+	int random = rand();
+	int distance = right - left;
+	return left + random % (right - left);
+}
+void swap(struct Command* a, struct Command* b)
+{
+	struct Command temp;
+	temp = *a;
+	*a = *b;
+	*b = temp;
+}
+int absCal(int x)
+{
+	return x > 0 ? x : -x;
+}
+void initAI(int me)
+{
+	printf("DEBUG My AI is %d,\n", me);
+	fflush(stdout);
 }
