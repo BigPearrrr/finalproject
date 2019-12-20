@@ -3,64 +3,6 @@
 #include <string.h>
 #include <time.h>
 #include <math.h>
-
-//---------------------------宏定义区------------------------------
-
-#define BOARD_SIZE 8
-#define VIRTUALARRAYLENGTH 5
-#define EMPTY 0
-#define BLACK 1
-#define WHITE 2
-#define B_KING 3
-#define W_KING 4
-
-typedef int BOOL;
-#define TRUE 1
-#define FALSE 0
-
-#define MAX_BYTE 10000
-#define TO_STRING(x) "%" #x "[^\n]"
-#define LINE_FORMAT(l) TO_STRING(l)
-#define MAX_STEP 15
-#define MAX_TURN 120
-
-#define START "START"
-#define PLACE "PLACE"
-#define TURN "TURN"
-#define END "END"
-#define WITHDRAWME "WITHDRAWME"
-#define WITHDRAWOTHER "WITHDRAWOTHER"
-
-#define KINGSCORE 20//若它是王，则一定是普兵 普兵+1 所以共+3
-#define POWNSCORE 10
-#define INF 999999
-#define DEPTH 13
-
-#define ATTACKWEIGHT 3
-#define DEFENDWEIGHT 9
-#define EATWEIGHT 1
-#define DIFFERWEIGHT 5
-#define REPEATWEIGHT 10
-#define TIMELIMIT 1.85
-
-#define DANGERREMAIN1 10
-#define DANGERDEPTH1 15
-
-#define DANGERREMAIN2 8
-#define DANGERDEPTH2 17
-
-#define DANGERREMAIN3 6
-#define DANGERDEPTH3 19
-
-#define DANGERREMAIN4 4
-#define DANGERDEPTH4 23
-
-#define DANGERREMAIN5 2
-#define DANGERTURN 60
-#define CEILINGPOINT 3
-#define SAFESCORE 3
-#define PREVIOUSTURN 80
-
 //---------------------------------------------------------
 
 //11.18 开始项目，添加一些基本的注释
@@ -149,6 +91,68 @@ typedef int BOOL;
 
 //12.20	随机数列不好用，现在的设想是加入评判危险系数，根据危险系数排序来决定搜索顺序
 //		美化了代码
+//		先试试仅估值加入danger
+
+//---------------------------宏定义区------------------------------
+
+#define BOARD_SIZE 8
+#define VIRTUALARRAYLENGTH 5
+#define EMPTY 0
+#define BLACK 1
+#define WHITE 2
+#define B_KING 3
+#define W_KING 4
+
+typedef int BOOL;
+#define TRUE 1
+#define FALSE 0
+
+#define MAX_BYTE 10000
+#define TO_STRING(x) "%" #x "[^\n]"
+#define LINE_FORMAT(l) TO_STRING(l)
+#define MAX_STEP 15
+#define MAX_TURN 120
+
+#define START "START"
+#define PLACE "PLACE"
+#define TURN "TURN"
+#define END "END"
+#define WITHDRAWME "WITHDRAWME"
+#define WITHDRAWOTHER "WITHDRAWOTHER"
+
+#define KINGSCORE 20//若它是王，则一定是普兵 普兵+1 所以共+3
+#define POWNSCORE 10
+#define INF 999999
+#define DEPTH 13
+
+#define ATTACKWEIGHT 3
+#define DEFENDWEIGHT 9
+#define EATWEIGHT 1
+#define DIFFERWEIGHT 5
+#define REPEATWEIGHT 10
+#define TIMELIMIT 1.85
+
+#define DANGERREMAIN1 10
+#define DANGERDEPTH1 15
+
+#define DANGERREMAIN2 8
+#define DANGERDEPTH2 17
+
+#define DANGERREMAIN3 6
+#define DANGERDEPTH3 19
+
+#define DANGERREMAIN4 4
+#define DANGERDEPTH4 23
+
+#define DANGERREMAIN5 2
+#define DANGERTURN 60
+
+#define CEILINGPOINT 3
+#define SAFESCORE 3
+#define PREVIOUSTURN 80
+
+#define ASSWEIGHT 4
+#define EMPTYWEIGHT 1
 
 //---------------------------全局变量区------------------------------
 struct Command
@@ -162,6 +166,8 @@ struct Command
 char curBoard1[BOARD_SIZE][BOARD_SIZE] = { 0 };//用来操作的虚拟棋盘
 int curTurn;//记录现在的回合数
 char board[BOARD_SIZE][BOARD_SIZE] = { 0 };//真实对局board
+int dangerBoard[BOARD_SIZE][BOARD_SIZE] = { 0 };//真实对局board
+
 struct Command validEat[MAX_TURN][MAX_STEP];
 struct Command bestMove[MAX_TURN];//记录每手的输出
 struct Command validMove[MAX_TURN][MAX_STEP];//记录每手可能的走子
@@ -382,26 +388,40 @@ int gameOver(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int curTurn,int flag)
 	return 0;
 }
 //
-//int getDangerIndex(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int x, int y,int flag)//对棋子的危险性进行评估
-//{
-//	int nextX, nextY;
-//	int dangerIndex=0;
-//	int surroundingEmptyNum = 0;
-//	for (int i = 0; i < 4; i++)
-//	{
-//		nextX = x + normalMoveDirection[i][0];
-//		nextY = x + normalMoveDirection[i][1];
-//		if (!isInBound(nextX, nextY))//如果在边界的话直接认为它是一颗安全棋子
-//			return 0;
-//		if (is_empty((char(*)[BOARD_SIZE])curBoard1, nextX, nextY))
-//		{
-//			surroundingEmptyNum++;
-//		}
-//		if (is_others((const char(*)[BOARD_SIZE])curBoard1,))
-//	}
-//	
-//	return 0;
-//}
+int getDangerIndex(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int x, int y,int flag)//对棋子的危险性进行评估
+{
+	int nextX, nextY;
+	int assX, assY;//在你屁股后面
+	int assassX, assassY;//屁股的屁股
+	int dangerIndex=0;
+	int surroundingEmptyNum = 0;
+	int kickAssIndex = 0;
+	for (int i = 0; i < 4; i++)
+	{
+		nextX = x + normalMoveDirection[i][0];
+		nextY = y + normalMoveDirection[i][1];
+		
+		if (!isInBound(nextX, nextY))//如果在边界的话直接认为它是一颗安全棋子
+			return -SAFESCORE;
+		if (is_empty((const char(*)[BOARD_SIZE])curBoard1, nextX, nextY))
+		{
+			surroundingEmptyNum++;
+			assX = x + normalMoveDirection[i + 2][0];
+			assY = y + normalMoveDirection[i + 2][1];
+			if (is_others((const char(*)[BOARD_SIZE])curBoard1, assX, assY,3-flag))
+			{
+				assassX = x + eatDirection[i + 2][0];
+				assassY = y + eatDirection[i + 2][1];
+				if (is_others((const char(*)[BOARD_SIZE])curBoard1, assassX, assassY, 3 - flag) || !isInBound(assassX, assassY))
+				{
+					kickAssIndex++;
+				}
+			}
+		}
+	}
+	dangerIndex = ASSWEIGHT * kickAssIndex + EMPTYWEIGHT * surroundingEmptyNum;
+	return dangerIndex;
+}
 
 int evaluate(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int curFlag, int turn)//估值函数，给curBoard1打分
 {
@@ -414,18 +434,30 @@ int evaluate(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int curFlag, int turn
 			return -INF;
 	}
 	int totalScore = 0;
-	if (turn <= PREVIOUSTURN)
+	int defendScore = 0;
+	int attackScore = 0;
+	for (int i = 0; i < BOARD_SIZE; i++)
 	{
-		for (int i = 0; i < 6; i++)
+		for (int j = 0; j < BOARD_SIZE; j++)
 		{
-			if (is_mine((const char(*)[BOARD_SIZE])curBoard1, previousSafeDistrict[i][0],previousSafeDistrict[i][1], me_flag))
+			if (is_mine((const char(*)[BOARD_SIZE])curBoard1, i, j, me_flag))
 			{
-				totalScore += SAFESCORE;
+				dangerBoard[i][j] = getDangerIndex((const char(*)[BOARD_SIZE])curBoard1, i, j, me_flag);
+				defendScore -= dangerBoard[i][j];
 			}
 		}
 	}
+	if (curFlag == me_flag)
+	{
+		attackScore += EATWEIGHT * validEatStep[curTurn];
+	}
+	else
+	{
+		defendScore -= EATWEIGHT * validEatStep[curTurn];
+	}
 	int differnum = blackScore - whiteScore;
-	totalScore += me_flag == BLACK ? differnum : -differnum;
+	attackScore += me_flag == BLACK ? differnum : -differnum;
+	totalScore += ATTACKWEIGHT * attackScore + DEFENDWEIGHT * defendScore;
 	return totalScore;
 }
 
@@ -602,7 +634,8 @@ struct Command aiTurn(const char board[BOARD_SIZE][BOARD_SIZE], int me)
 {
 	initAllStructArray();
 	memset(bestMove, 0, sizeof(bestMove));
-	if (thisNodeValue < 0)//根据当前子力多少来决定搜索深度
+	if (thisNodeValue < 0)
+	{//根据当前子力多少来决定搜索深度
 		if (numRemaining[me_flag] <= DANGERREMAIN1)
 		{
 			depth = DANGERDEPTH1;
@@ -623,6 +656,7 @@ struct Command aiTurn(const char board[BOARD_SIZE][BOARD_SIZE], int me)
 		{
 			depth = (MAX_TURN - curTurn) / 2 + 1;
 		}
+	}
 	thisNodeValue = miniMax((const char(*)[BOARD_SIZE])curBoard1, depth);
 	if (bestMove[curTurn].numStep < 2)
 	{
@@ -669,7 +703,8 @@ int main(int argc, char* argv[])
 
 
 
-/* _____                     _      ______                          
+/*
+ _____                     _      ______                          
 /  ___|                   | |     |  _  \                         
 \ `--.  ___  __ _ _ __ ___| |__   | | | |___  ___ _ __   ___ _ __ 
  `--. \/ _ \/ _` | '__/ __| '_ \  | | | / _ \/ _ \ '_ \ / _ \ '__|
@@ -917,15 +952,6 @@ void start(int flag)
 	initAI(flag);
 }
 
-//void randomizeArray(struct Command* array, int allPossibility)//生成一个随机数组
-//{
-//	srand((unsigned)time(NULL));
-//	for (int i = 0; i < allPossibility; i++)
-//	{
-//		int temp = rand() % (allPossibility - i) + i;
-//		swap(&array[temp], &array[i]);
-//	}
-//}
 
 void loop()
 {
