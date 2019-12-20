@@ -1,4 +1,2 @@
 ﻿  main.cpp
-C:\Users\BigPear\source\repos\AIDraughts\AIDraughts\main.cpp(386,61): warning C4390: “;”: 找到空的受控语句；这是否是有意的?
-C:\Users\BigPear\source\repos\AIDraughts\AIDraughts\main.cpp(379,6): warning C4101: “dangerIndex”: 未引用的局部变量
   AIDraughts.vcxproj -> C:\Users\BigPear\source\repos\AIDraughts\Debug\AIDraughts.exe

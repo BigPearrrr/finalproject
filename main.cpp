@@ -44,10 +44,10 @@ typedef int BOOL;
 #define TIMELIMIT 1.85
 
 #define DANGERREMAIN1 10
-#define DANGERDEPTH1 14
+#define DANGERDEPTH1 15
 
 #define DANGERREMAIN2 8
-#define DANGERDEPTH2 16
+#define DANGERDEPTH2 17
 
 #define DANGERREMAIN3 6
 #define DANGERDEPTH3 19
@@ -147,9 +147,8 @@ typedef int BOOL;
 
 //12.19	¼ÓÈëÁËËæ»úÊıÁĞÓÅ»¯ËÑË÷
 
-int randomint(int left, int right);//Éú³ÉËæ»úÕûÊı
-
-
+//12.20	Ëæ»úÊıÁĞ²»ºÃÓÃ£¬ÏÖÔÚµÄÉèÏëÊÇ¼ÓÈëÆÀÅĞÎ£ÏÕÏµÊı£¬¸ù¾İÎ£ÏÕÏµÊıÅÅĞòÀ´¾ö¶¨ËÑË÷Ë³Ğò
+//		ÃÀ»¯ÁË´úÂë
 
 //---------------------------È«¾Ö±äÁ¿Çø------------------------------
 struct Command
@@ -160,9 +159,10 @@ struct Command
 	int allPossibility;//ÓÃÀ´¼ÇÂ¼Ò»¸öturnËùÓĞµÄ¿ÉÄÜ×ß×ÓµÄ
 	int maxStep;//ÓÃÀ´¼ÇÂ¼¿É³Ô×ÓµÄ×î´ó²½Êı
 };
-char curBoard1[BOARD_SIZE][BOARD_SIZE] = { 0 };//ÓÃÀ´²Ù×÷µÄÁÙÊ±ÆåÅÌ
+char curBoard1[BOARD_SIZE][BOARD_SIZE] = { 0 };//ÓÃÀ´²Ù×÷µÄĞéÄâÆåÅÌ
 int curTurn;//¼ÇÂ¼ÏÖÔÚµÄ»ØºÏÊı
 char board[BOARD_SIZE][BOARD_SIZE] = { 0 };//ÕæÊµ¶Ô¾Öboard
+struct Command validEat[MAX_TURN][MAX_STEP];
 struct Command bestMove[MAX_TURN];//¼ÇÂ¼Ã¿ÊÖµÄÊä³ö
 struct Command validMove[MAX_TURN][MAX_STEP];//¼ÇÂ¼Ã¿ÊÖ¿ÉÄÜµÄ×ß×Ó
 int me_flag;
@@ -173,12 +173,12 @@ clock_t startTime;
 clock_t endTime;
 int numRemaining[5] = { 24,12,12 ,0,0 };
 int virtualNumRemaining[5] = { 24,12,12,0,0 };
-struct Command validEat[MAX_TURN][MAX_STEP];
 int possibility;
 int previousSafeDistrict[6][2] = { {1,0},{3,0},{5,0},{2,7},{4,7},{6,7} };
 int flag_hold;
 int depth = DEPTH;
-
+int thisNodeValue = 0;
+int validEatStep[MAX_TURN];
 //------------------------------------------------------------------
 
 //-------------------------»ù±¾º¯Êı----------------------------------
@@ -192,11 +192,11 @@ void printBoard();
 
 void printCurBoard(const char curBoard1[BOARD_SIZE][BOARD_SIZE]);//Êä³öcurBoard1
 
-BOOL isInBound(int x, int y);
+BOOL isInBound(int x, int y);//ÅĞ¶ÏÊÇ·ñÔÚ½çÄÚ
 
 void place(struct Command cmd, int cur_flag);
 
-void placeCurBoard(char curBoard1[BOARD_SIZE][BOARD_SIZE], struct Command cmd, int cur_flag);//ÔÚcurBoard1ÉÏ×ß×Ó
+void placeCurBoard(char curBoard1[BOARD_SIZE][BOARD_SIZE], struct Command cmd, int cur_flag);//ÔÚcurBoard1£¨ĞéÄâÆåÅÌ£©ÉÏ×ß×Ó
 
 BOOL is_empty(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int x, int y);//ÅĞ¶ÏÊÇ·ñÎª¿Õ
 
@@ -206,7 +206,14 @@ BOOL is_others(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int x, int y, int o
 
 void initAI(int me);//³õÊ¼»¯ÎÒµÄAI
 
+int randomint(int left, int right);//Éú³ÉËæ»úÕûÊı
 
+void start(int flag);
+
+void randomizeArray(struct Command* array, int allPossibility);
+
+//ÒÔÏÂÎªºËĞÄ²¿·Ö
+//ËÑË÷¿ÉĞĞ×Å·¨
 //-------------------------------------------------------------
 //  DFS_validEat:²éÕÒ³Ô×Ó&¶àÖØ³Ô×ÓµÄ¿ÉÄÜĞÔ
 //	scanValidEat:Í¨¹ı³õÊ¼»¯²éÕÒ¶àÖØ³Ô×Ó
@@ -248,7 +255,7 @@ void DFS_validEat(char curBoard1[BOARD_SIZE][BOARD_SIZE], int x, int y, int flag
 	}
 }
 
-void giveNumberMaxStep(int turn)
+void giveNumberMaxStep(int turn)//¸øcommand¼ÓmaxstepÒÔÉ¸Ñ¡³öÓĞ¶à³Ô¶à
 {
 	int curPossibility = validEat[turn][0].allPossibility;
 	int maxStep = 0;
@@ -262,7 +269,7 @@ void giveNumberMaxStep(int turn)
 	}
 }
 
-void scanValidEat(int flag, int turn)
+void scanValidEat(int flag, int turn)//²éÕÒËùÓĞ¿É³ÔµÄ×Ó
 {
 	possibility = 0;
 	for (int i = 0; i < BOARD_SIZE; i++)
@@ -277,7 +284,7 @@ void scanValidEat(int flag, int turn)
 	}
 }
 
-void scanValidMove(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int curFlag, int turn)
+void scanValidMove(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int curFlag, int turn)//²éÕÒÆÕÍ¨µÄÎ»ÒÆ
 {
 	int possibility = 0;
 	for (int x = 0; x < BOARD_SIZE; x++)
@@ -321,11 +328,11 @@ void scanValidMove(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int curFlag, in
 	}
 	for (int i = 0; i < possibility; i++)
 	{
-		validMove[turn][i].allPossibility = possibility - 1;
+		validMove[turn][i].allPossibility = possibility - 1;//¸øallpossibility¸³Öµ
 	}
 }
 
-int scanAllvalidMove(char curBoard1[BOARD_SIZE][BOARD_SIZE], int flag, int curTurn)
+int scanAllvalidMove(char curBoard1[BOARD_SIZE][BOARD_SIZE], int flag, int curTurn)//½«ÉÏÊöÁ½¸öº¯Êı·â×°£¬·µ»ØµÄÊÇ¿É³ÔµÄ²½Êı
 //ÏÈËÑ³Ô×Ó£¬ÓĞÔò·µ»Ø¾ßÌå¿É³ÔµÄÊıÁ¿£»ÔÙËÑÆÕÍ¨Î»ÒÆ
 {
 	scanValidEat(flag, curTurn);
@@ -356,9 +363,12 @@ int scanAllvalidMove(char curBoard1[BOARD_SIZE][BOARD_SIZE], int flag, int curTu
 
 int blackScore = 0, whiteScore = 0;
 
-int gameOver(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int curTurn)
+int gameOver(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int curTurn,int flag)
 //ÅĞ¶ÏÓÎÏ·ÊÇ·ñ½áÊø£¬Èô½áÊøÔòÖ±½ÓÊä³ö»ñÊ¤µÄÄÇ·½£¬Î´½áÊøÔòÊä³ö0.
 {
+	validEatStep[curTurn] = scanAllvalidMove((char(*)[BOARD_SIZE])curBoard1, flag, curTurn);
+	if (validEatStep[curTurn]<2&&validMove[curTurn][0].allPossibility == 0)
+		return 3 - flag;
 	if (virtualNumRemaining[WHITE] == 0)
 		return BLACK;
 	if (virtualNumRemaining[BLACK] == 0)
@@ -371,26 +381,31 @@ int gameOver(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int curTurn)
 		return blackScore > whiteScore ? BLACK : WHITE;
 	return 0;
 }
+//
+//int getDangerIndex(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int x, int y,int flag)//¶ÔÆå×ÓµÄÎ£ÏÕĞÔ½øĞĞÆÀ¹À
+//{
+//	int nextX, nextY;
+//	int dangerIndex=0;
+//	int surroundingEmptyNum = 0;
+//	for (int i = 0; i < 4; i++)
+//	{
+//		nextX = x + normalMoveDirection[i][0];
+//		nextY = x + normalMoveDirection[i][1];
+//		if (!isInBound(nextX, nextY))//Èç¹ûÔÚ±ß½çµÄ»°Ö±½ÓÈÏÎªËüÊÇÒ»¿Å°²È«Æå×Ó
+//			return 0;
+//		if (is_empty((char(*)[BOARD_SIZE])curBoard1, nextX, nextY))
+//		{
+//			surroundingEmptyNum++;
+//		}
+//		if (is_others((const char(*)[BOARD_SIZE])curBoard1,))
+//	}
+//	
+//	return 0;
+//}
 
-int validEatStep[MAX_TURN];
-int getDangerIndex(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int x, int y)
-{
-	int nextX, nextY;
-	int dangerIndex;
-	for (int i = 0; i < 4; i++)
-	{
-		nextX = x + normalMoveDirection[i][0];
-		nextY = x + normalMoveDirection[i][1];
-		if (!isInBound(nextX, nextY))
-			return 0;
-		if (is_empty((char(*)[BOARD_SIZE])curBoard1,nextX, nextY));
-
-	}
-	return 0;
-}
 int evaluate(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int curFlag, int turn)//¹ÀÖµº¯Êı£¬¸øcurBoard1´ò·Ö
 {
-	int winFlag = gameOver((char(*)[BOARD_SIZE])curBoard1, turn);
+	int winFlag = gameOver((char(*)[BOARD_SIZE])curBoard1,turn,curFlag);
 	if (winFlag) 
 	{
 		if (winFlag == me_flag)
@@ -432,15 +447,6 @@ void giveNumRemaining(int originArray[3], int targetArray[3], int length)
 		targetArray[i] = originArray[i];
 	}
 }
-void randomizeArray(struct Command *array, int allPossibility)//Éú³ÉÒ»¸öËæ»úÊı×é
-{
-	srand((unsigned)time(NULL));
-	for (int i = 0; i <allPossibility; i++)
-	{
-		int temp = rand() % (allPossibility - i) + i;
-		swap(&array[temp], &array[i]);
-	}
-}
 
 int alphaBeta(char curBoard1[BOARD_SIZE][BOARD_SIZE], int turn, int depth, int flag, int alpha, int beta)//alphabeta¼ôÖ¦
 {
@@ -459,7 +465,6 @@ int alphaBeta(char curBoard1[BOARD_SIZE][BOARD_SIZE], int turn, int depth, int f
 	{
 		return myScore;
 	}
-	validEatStep[turn] = scanAllvalidMove((char(*)[BOARD_SIZE])curBoard1, flag, turn);
 	int curValidEatStep = validEatStep[turn];
 	//randomizeArray(validMove[turn], validMove[turn][0].allPossibility);
 	if (flag == me_flag)
@@ -593,8 +598,6 @@ int miniMax(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int depth)//¼«´ó¼«Ğ¡Öµ
 	return x;
 }
 
-int thisNodeValue = 0;
-
 struct Command aiTurn(const char board[BOARD_SIZE][BOARD_SIZE], int me)
 {
 	initAllStructArray();
@@ -629,25 +632,7 @@ struct Command aiTurn(const char board[BOARD_SIZE][BOARD_SIZE], int me)
 	}
 	return bestMove[curTurn];
 }
-void start(int flag)
-{
-	memset(board, 0, sizeof(board));
-	for (int i = 0; i < 3; i++)
-	{
-		for (int j = 0; j < 8; j += 2)
-		{
-			board[i][j + (i + 1) % 2] = WHITE;
-		}
-	}
-	for (int i = 5; i < 8; i++)
-	{
-		for (int j = 0; j < 8; j += 2)
-		{
-			board[i][j + (i + 1) % 2] = BLACK;
-		}
-	}
-	initAI(flag);
-}
+
 
 void turn()
 {
@@ -673,50 +658,7 @@ void end(int x)
 	printf("DEBUG GG!!\n");
 }
 
-void loop()
-{
-	char tag[10] = { 0 };
-	char buffer[MAX_BYTE + 1] = { 0 };
-	struct Command command = {
-			.x = {0},
-			.y = {0},
-			.numStep = 0 };
-	int status;
-	while (TRUE)
-	{
-		memset(tag, 0, sizeof(tag));
-		memset(buffer, 0, sizeof(buffer));
-		scanf("%s", tag);
-		if (strcmp(tag, START) == 0)
-		{
-			scanf("%d", &me_flag);
-			other_flag = 3 - me_flag;
-			start(me_flag);
-			printf("OK\n");
-			fflush(stdout);
-		}
-		else if (strcmp(tag, PLACE) == 0)
-		{
-			scanf("%d", &command.numStep);
-			for (int i = 0; i < command.numStep; i++)
-			{
-				scanf("%d,%d", &command.x[i], &command.y[i]);
-			}
-			bestMove[curTurn] = command;
-			place(command, other_flag);
-		}
-		else if (strcmp(tag, TURN) == 0)
-		{
-			turn();
-		}
-		else if (strcmp(tag, END) == 0)
-		{
-			scanf("%d", &status);
-			end(status);
-		}
-		//printBoard();
-	}
-}
+void loop();
 
 int main(int argc, char* argv[])
 {
@@ -786,6 +728,7 @@ void printBoard()//Êä³öÆåÅÌ
 		printf("%s\n", visual_board[i]);
 	}
 }
+
 void printCurBoard(const char curBoard1[BOARD_SIZE][BOARD_SIZE])//Êä³öcurBoard1
 {
 	char visual_board[BOARD_SIZE][BOARD_SIZE + 1] = { 0 };
@@ -821,6 +764,7 @@ void printCurBoard(const char curBoard1[BOARD_SIZE][BOARD_SIZE])//Êä³öcurBoard1
 	}
 	printf("¡ıNext Possibility¡ı\n");
 }
+
 void place(struct Command cmd, int cur_flag)
 {
 	int x_mid, y_mid;
@@ -857,10 +801,12 @@ void place(struct Command cmd, int cur_flag)
 	}
 	curTurn++;
 }
+
 BOOL isInBound(int x, int y)
 {
 	return x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE;
 }
+
 void placeCurBoard(char curBoard1[BOARD_SIZE][BOARD_SIZE], struct Command cmd, int cur_flag)//ÔÚcurBoard1ÉÏ×ß×Ó
 {
 	int x_mid, y_mid;
@@ -893,6 +839,7 @@ void placeCurBoard(char curBoard1[BOARD_SIZE][BOARD_SIZE], struct Command cmd, i
 		}
 	}
 }
+
 BOOL is_empty(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int x, int y)//ÅĞ¶ÏÊÇ·ñÎª¿Õ
 {
 	if (!(x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE))
@@ -901,24 +848,28 @@ BOOL is_empty(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int x, int y)//ÅĞ¶ÏÊ
 		return FALSE;
 	return TRUE;
 }
+
 BOOL is_mine(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int x, int y, int me)//ÅĞ¶Ï¸Ã¿ÕÊÇ·ñÊÇÎÒµÄÆå
 {
 	if (curBoard1[x][y] == me || curBoard1[x][y] == me + 2)
 		return TRUE;
 	return FALSE;
 }
+
 BOOL is_others(const char curBoard1[BOARD_SIZE][BOARD_SIZE], int x, int y, int others)//ÅĞ¶Ï¸Ã¿ÕÊÇ·ñÊÇ±ğÈËµÄÆå
 {
 	if (curBoard1[x][y] == others || curBoard1[x][y] == others + 2)
 		return TRUE;
 	return FALSE;
 }
+
 void initAllStructArray()//ÓÃÓÚ³õÊ¼»¯¼¸¸ö½á¹¹ÌåÊı×é
 {
 	//memset(bestMove, 0, sizeof(bestMove));
 	memset(validMove, 0, sizeof(validMove));
 	memset(validEat, 0, sizeof(validEat));
 }
+
 int randomint(int left, int right)
 {
 	srand((unsigned)time(NULL));
@@ -926,6 +877,7 @@ int randomint(int left, int right)
 	int distance = right - left;
 	return left + random % (right - left);
 }
+
 void swap(struct Command* a, struct Command* b)
 {
 	struct Command temp;
@@ -933,12 +885,99 @@ void swap(struct Command* a, struct Command* b)
 	*a = *b;
 	*b = temp;
 }
+
 int absCal(int x)
 {
 	return x > 0 ? x : -x;
 }
+
 void initAI(int me)
 {
 	printf("DEBUG My AI is %d,\n", me);
 	fflush(stdout);
+}
+
+void start(int flag)
+{
+	memset(board, 0, sizeof(board));
+	for (int i = 0; i < 3; i++)
+	{
+		for (int j = 0; j < 8; j += 2)
+		{
+			board[i][j + (i + 1) % 2] = WHITE;
+		}
+	}
+	for (int i = 5; i < 8; i++)
+	{
+		for (int j = 0; j < 8; j += 2)
+		{
+			board[i][j + (i + 1) % 2] = BLACK;
+		}
+	}
+	initAI(flag);
+}
+
+//void randomizeArray(struct Command* array, int allPossibility)//Éú³ÉÒ»¸öËæ»úÊı×é
+//{
+//	srand((unsigned)time(NULL));
+//	for (int i = 0; i < allPossibility; i++)
+//	{
+//		int temp = rand() % (allPossibility - i) + i;
+//		swap(&array[temp], &array[i]);
+//	}
+//}
+
+void loop()
+{
+	char tag[10] = { 0 };
+	char buffer[MAX_BYTE + 1] = { 0 };
+	struct Command command = {
+			.x = {0},
+			.y = {0},
+			.numStep = 0 };
+	int status;
+	while (TRUE)
+	{
+		memset(tag, 0, sizeof(tag));
+		memset(buffer, 0, sizeof(buffer));
+		scanf("%s", tag);
+		if (strcmp(tag, START) == 0)
+		{
+			scanf("%d", &me_flag);
+			other_flag = 3 - me_flag;
+			start(me_flag);
+			printf("OK\n");
+			fflush(stdout);
+		}
+		else if (strcmp(tag, PLACE) == 0)
+		{
+			scanf("%d", &command.numStep);
+			for (int i = 0; i < command.numStep; i++)
+			{
+				scanf("%d,%d", &command.x[i], &command.y[i]);
+			}
+			bestMove[curTurn] = command;
+			place(command, other_flag);
+		}
+		else if (strcmp(tag, TURN) == 0)
+		{
+			turn();
+		}
+		else if (strcmp(tag, END) == 0)
+		{
+			scanf("%d", &status);
+			end(status);
+		}
+		//printBoard();
+	}
+}
+
+void randomizeArray(struct Command* array, int allPossibility)//Éú³ÉÒ»¸öËæ»úÊı×é
+{
+	srand((unsigned)time(NULL));
+	for (int i = 0; i < allPossibility; i++)
+	{
+		int temp = rand() % (allPossibility - i) + i;
+		swap(&array[temp], &array[i]);
+	}
 }
